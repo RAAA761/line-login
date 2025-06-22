@@ -1,0 +1,8 @@
+{
+  "tasks": {
+    "start": "deno run --allow-net index.ts"
+  },
+  "imports": {
+    "@evex/linejs": "jsr:@evex/linejs@^2.1.5"
+  }
+}
