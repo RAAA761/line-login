@@ -162,16 +162,17 @@ async function fetchToken() {
   }
 }
 
-/* --- ③ ページが再びアクティブになったら（モバイルのみ）自動クリック --- */
+// ★ listener を“関数”として渡す
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && uaIsMobile && sessionId) {
-    $("getTokenBtn").click();
+    $("getTokenBtn").click();      // ← ここで初めて click() を実行
   }
 });
 
-/* --- ④ スマホでは戻って来た瞬間にも実行されるよう pageshow --- */
 window.addEventListener("pageshow", (ev) => {
-  if (uaIsMobile && sessionId && ev.persisted) $("getTokenBtn").click();
+  if (uaIsMobile && sessionId && ev.persisted) {
+    $("getTokenBtn").click();
+  }
 });
 
 /* --- リンク表示 & 自動リダイレクト --- */
