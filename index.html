@@ -89,80 +89,102 @@
   </style>
 </head>
 <body>
-  <div class="login-container">
-    <h2>LINEOC ログイン</h2>
+<div class="login-container">
+  <h2>LINEOC ログイン</h2>
 
-    <label>
-      メールアドレス
-      <input type="email" id="email" required>
-    </label>
+  <label>メールアドレス
+    <input type="email" id="email" required>
+  </label>
+  <label>パスワード
+    <input type="password" id="password" required>
+  </label>
 
-    <label>
-      パスワード
-      <input type="password" id="password" required>
-    </label>
+  <button id="login">PINコード取得</button>
 
-    <button id="login">PINコード取得</button>
+  <div id="pincode">PIN: <span id="pincodeValue"></span></div>
 
-    <div id="pincode">
-      PIN: <span id="pincodeValue"></span>
-    </div>
+  <button id="getTokenBtn" style="display:none;">AuthToken を取得</button>
 
-    <div id="redirectInfo" style="display: none;">
-      5秒後に操作ページへ移動します<br>
-      <button id="copyLink">操作用ページのリンクをコピー</button>
-    </div>
+  <div id="redirectInfo" style="display:none;">
+    5 秒後に操作ページへ移動します<br>
+    <button id="copyLink">操作用ページのリンクをコピー</button>
   </div>
+</div>
 
-  <script>
-    let sessionId = null;
-    document.getElementById("login").onclick = async () => {
-      const email = document.getElementById("email").value.trim();
-      const password = document.getElementById("password").value.trim();
+<script>
+const storageKey = "lineoc-session-id";
+let sessionId     = localStorage.getItem(storageKey) || null;
 
-      const res = await fetch("/api/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, device: "IOSIPAD" })
-      });
+const $ = id => document.getElementById(id);
+const uaIsMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
-      const data = await res.json();
+/* --- ① PIN 取得 --- */
+$("login").onclick = async () => {
+  const email = $("email").value.trim();
+  const pw    = $("password").value.trim();
+  if (!email || !pw) return alert("メールとパスワードを入力して下さい");
 
-      if (data.pincode && data.sessionId) {
-        sessionId = data.sessionId;
-        document.getElementById("pincodeValue").textContent = data.pincode;
-        document.getElementById("pincode").style.display = "block";
+  const r = await fetch("/api/login", {
+    method : "POST",
+    headers: {"Content-Type":"application/json"},
+    body   : JSON.stringify({ email, password: pw, device:"IOSIPAD" })
+  });
+  const j = await r.json();
 
-        // 5秒後に認証リクエスト送信 → 遷移
-        setTimeout(async () => {
-          const res2 = await fetch("/api/pin", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ sessionId, pincode: data.pincode })
-          });
-          const result = await res2.json();
+  sessionId = j.sessionId;
+  localStorage.setItem(storageKey, sessionId);
 
-          if (result.url) {
-            const link = result.url;
-            const copyBtn = document.getElementById("copyLink");
-            const info = document.getElementById("redirectInfo");
-            info.style.display = "block";
+  $("pincodeValue").textContent = j.pincode;
+  $("pincode").style.display = "block";
+  $("getTokenBtn").style.display = "inline-block";
+};
 
-            copyBtn.onclick = () => {
-              navigator.clipboard.writeText(link)
-                .then(() => copyBtn.textContent = "コピーしました ✔️")
-                .catch(() => copyBtn.textContent = "コピー失敗 ❌");
-            };
+/* --- ② AuthToken 取得 --- */
+$("getTokenBtn").onclick = fetchToken;
 
-            setTimeout(() => {
-              window.location.href = link;
-            }, 5000);
-          }
-        }, 500);
-      } else {
-        alert(data.error || "PINコード取得に失敗しました");
-      }
-    };
-  </script>
+async function fetchToken() {
+  if (!sessionId) return alert("セッションがありません");
+  $("getTokenBtn").disabled = true;
+
+  const r = await fetch("/api/result?sid=" + encodeURIComponent(sessionId));
+  const j = await r.json();
+
+  if (j.status === "OK") {
+    const link =
+      `https://line-extension.deno.dev/?token=${j.token}&refresh=${j.refresh}`;
+    showLink(link);
+  } else if (j.status === "PENDING") {
+    alert("まだ認証が完了していません。少し待ってから再度押して下さい。");
+    $("getTokenBtn").disabled = false;
+  } else {
+    alert(j.error || "エラー");
+    $("getTokenBtn").disabled = false;
+  }
+}
+
+/* --- ③ ページが再びアクティブになったら（モバイルのみ）自動クリック --- */
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && uaIsMobile && sessionId) {
+    $("getTokenBtn").click();
+  }
+});
+
+/* --- ④ スマホでは戻って来た瞬間にも実行されるよう pageshow --- */
+window.addEventListener("pageshow", (ev) => {
+  if (uaIsMobile && sessionId && ev.persisted) $("getTokenBtn").click();
+});
+
+/* --- リンク表示 & 自動リダイレクト --- */
+function showLink(link) {
+  const info = $("redirectInfo");
+  const btn  = $("copyLink");
+  info.style.display = "block";
+  btn.onclick = () =>
+    navigator.clipboard.writeText(link)
+      .then(()=>btn.textContent="コピーしました！")
+      .catch(()=>btn.textContent="コピー失敗....");
+  setTimeout(() => location.href = link, 5000);
+}
+</script>
 </body>
 </html>
