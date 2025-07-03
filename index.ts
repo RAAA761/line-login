@@ -24,36 +24,36 @@ setInterval(() => {
 serve(async (req) => {
   const url = new URL(req.url);
   const { pathname, searchParams } = url;
-  console.log("[REQ]", req.method, pathname);
 
-  /* --- HTML 配信 --- */
+  /* --- HTML --- */
   if (req.method === "GET" && (pathname === "/" || pathname.endsWith(".html"))) {
     const filePath = pathname === "/" ? "./index.html" : `.${pathname}`;
-    try {
-      return await serveFile(req, filePath);
-    } catch {
-      return new Response("Not Found", { status: 404 });
-    }
+    return await serveFile(req, filePath).catch(
+      () => new Response("Not Found", { status: 404 }),
+    );
   }
 
-  /* --- POST /api/login : PIN 発行 --- */
+  /* --- POST /api/login : “自前 PIN” を発行 --- */
   if (req.method === "POST" && pathname === "/api/login") {
     const { email, password, device = "DESKTOPWIN" } = await req.json();
+
+    // ① backend で完全ランダムに 6 桁 PIN 生成
     const pincode = Math.floor(100000 + Math.random() * 900000).toString();
     const sid = crypto.randomUUID();
 
+    // ② 先にセッションを作成（PENDING 状態）
     sessions.set(sid, { pincode, created: Date.now() });
 
-    // 非同期ログイン
-    loginWithPassword({ email, password, pincode }, { device })
+    // ③ 非同期ログイン開始 ―― PIN は “こちらが決めたもの” を渡す！
+    loginWithPassword(
+      { email, password, pincode },   // ← ★ここがポイント
+      { device },
+    )
       .then(async (client) => {
-        const profile = await client.base.talk.getProfile();
-        const refresh = await client.base.storage.get("refreshToken");
-
         const s = sessions.get(sid);
         if (s) {
-          s.token = client.authToken;
-          s.refresh = refresh;
+          s.token   = client.authToken;
+          s.refresh = await client.base.storage.get("refreshToken");
         }
       })
       .catch((e) => {
@@ -61,18 +61,17 @@ serve(async (req) => {
         if (s) s.error = String(e);
       });
 
+    // ④ フロントへ PIN と sessionId を返却
     return Response.json({ sessionId: sid, pincode });
   }
 
-  /* --- GET /api/result?sid=xxx : 結果だけ返す --- */
+  /* --- GET /api/result?sid=... : 状態確認 --- */
   if (req.method === "GET" && pathname === "/api/result") {
     const sid = searchParams.get("sid")!;
     const s = sessions.get(sid);
     if (!s) return Response.json({ status: "INVALID" }, { status: 404 });
 
-    if (s.token) {
-      return Response.json({ status: "OK", token: s.token, refresh: s.refresh });
-    }
+    if (s.token) return Response.json({ status: "OK", token: s.token, refresh: s.refresh });
     if (s.error) return Response.json({ status: "ERROR", error: s.error });
     return Response.json({ status: "PENDING" });
   }
