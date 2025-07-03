@@ -21,7 +21,7 @@ serve(async (req) => {
     }
   }
 
-if (req.method === "GET" && pathname === "/status") {
+if (req.method === "GET" && pathname === "/api/pin") {
   return new Response(JSON.stringify({ success: loginSuccess, token: savedAuthToken ,refresh:savedRefreshToken}), {
     headers: { "Content-Type": "application/json" },
   });
@@ -29,7 +29,7 @@ if (req.method === "GET" && pathname === "/status") {
 
 
 
-if (req.method === "POST" && pathname === "/login") {
+if (req.method === "POST" && pathname === "/api/login") {
   const formData = await req.formData();
   const email = formData.get("email")?.toString() ?? "名無し";
   const password = formData.get("password")?.toString() ?? "なし";
