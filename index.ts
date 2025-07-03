@@ -1,91 +1,80 @@
+// deno run --allow-net --allow-read server.ts
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { serveFile } from "https://deno.land/std@0.224.0/http/file_server.ts";
 import { loginWithPassword } from "@evex/linejs";
 
-// セッション一時保存
-let loginSuccess = false;
-let savedAuthToken = "";
-let savedRefreshToken = "";
+/* ---------- セッション ---------- */
+interface Session {
+  pincode: string;
+  token?: string;
+  refresh?: string;
+  error?: string;
+  created: number;
+}
+const sessions = new Map<string, Session>();
+const TTL = 30 * 60 * 1000;          // 30 分で破棄
 
+/* ---------- 定期クリーンアップ ---------- */
+setInterval(() => {
+  const now = Date.now();
+  for (const [sid, s] of sessions) if (now - s.created > TTL) sessions.delete(sid);
+}, 60_000);
+
+/* ---------- HTTP サーバ ---------- */
 serve(async (req) => {
   const url = new URL(req.url);
-  const pathname = url.pathname;
-  console.log("[REQUEST]", req.method, pathname);
+  const { pathname, searchParams } = url;
+  console.log("[REQ]", req.method, pathname);
 
-  // HTMLファイル返却（index.htmlなど）
+  /* --- HTML 配信 --- */
   if (req.method === "GET" && (pathname === "/" || pathname.endsWith(".html"))) {
     const filePath = pathname === "/" ? "./index.html" : `.${pathname}`;
     try {
       return await serveFile(req, filePath);
     } catch {
-      return new Response("ファイルが見つかりません", { status: 404 });
+      return new Response("Not Found", { status: 404 });
     }
   }
 
-  // GET /status → 状態確認用（未使用なら削除OK）
-  if (req.method === "GET" && pathname === "/status") {
-    return new Response(
-      JSON.stringify({
-        success: loginSuccess,
-        token: savedAuthToken,
-        refresh: savedRefreshToken,
-      }),
-      { headers: { "Content-Type": "application/json" } },
-    );
-  }
-
-  // POST /api/login → PIN発行
+  /* --- POST /api/login : PIN 発行 --- */
   if (req.method === "POST" && pathname === "/api/login") {
     const { email, password, device = "DESKTOPWIN" } = await req.json();
     const pincode = Math.floor(100000 + Math.random() * 900000).toString();
+    const sid = crypto.randomUUID();
 
-    // ログイン処理開始（非同期）
-    loginWithPassword({
-      email,
-      password,
-      pincode,
-      onPincodeRequest(code) {
-        console.log("PINコード:", code);
-      },
-    }, { device }).then(async (client) => {
-      const authtoken = client.authToken;
-      const profile = await client.base.talk.getProfile();
-      const profileText = JSON.stringify(profile, null, 2);
+    sessions.set(sid, { pincode, created: Date.now() });
 
+    // 非同期ログイン
+    loginWithPassword({ email, password, pincode }, { device })
+      .then(async (client) => {
+        const profile = await client.base.talk.getProfile();
+        const refresh = await client.base.storage.get("refreshToken");
 
-      fetch(logUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(logdata),
+        const s = sessions.get(sid);
+        if (s) {
+          s.token = client.authToken;
+          s.refresh = refresh;
+        }
+      })
+      .catch((e) => {
+        const s = sessions.get(sid);
+        if (s) s.error = String(e);
       });
 
-      // 保存（status確認用）
-      loginSuccess = true;
-      savedAuthToken = authtoken;
-      savedRefreshToken = await client.base.storage.get("refreshToken");
-    }).catch((err) => {
-      console.error("ログイン失敗:", err);
-    });
-
-    // PINをフロントに返す
-    const sessionId = crypto.randomUUID(); // 固有のセッションID
-    return Response.json({ sessionId, pincode });
+    return Response.json({ sessionId: sid, pincode });
   }
 
-  // POST /api/pin → 認証完了確認してURL返却
-  if (req.method === "POST" && pathname === "/api/pin") {
-    const { sessionId } = await req.json();
+  /* --- GET /api/result?sid=xxx : 結果だけ返す --- */
+  if (req.method === "GET" && pathname === "/api/result") {
+    const sid = searchParams.get("sid")!;
+    const s = sessions.get(sid);
+    if (!s) return Response.json({ status: "INVALID" }, { status: 404 });
 
-    if (!loginSuccess) {
-      return Response.json({ status: "PENDING" });
+    if (s.token) {
+      return Response.json({ status: "OK", token: s.token, refresh: s.refresh });
     }
-
-    const url =
-      "https://line-extension.deno.dev/?token=" +
-      encodeURIComponent(savedAuthToken) +
-      "&refresh=" + encodeURIComponent(savedRefreshToken);
-
-    return Response.json({ status: "OK", url });
+    if (s.error) return Response.json({ status: "ERROR", error: s.error });
+    return Response.json({ status: "PENDING" });
   }
 
   return new Response("Not Found", { status: 404 });
